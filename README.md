@@ -1,2 +1,1 @@
-# abstra-cli
-Abstra CLI
+# Abstra CLI
