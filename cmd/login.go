@@ -1,13 +1,11 @@
 package cmd
 
 import (
+	"abstra-cli/config"
+	"abstra-cli/utils"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
-	"os/exec"
-	"os/user"
-	"runtime"
 
 	"github.com/gorilla/websocket"
 	"github.com/spf13/cobra"
@@ -23,56 +21,24 @@ var (
 	}
 )
 
-func check(e error) {
-	if e != nil {
-		panic(e)
-	}
-}
-
-func openbrowser(url string) {
-	var err error
-	switch runtime.GOOS {
-	case "linux":
-		err = exec.Command("xdg-open", url).Start()
-	case "windows":
-		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
-	case "darwin":
-		err = exec.Command("open", url).Start()
-	default:
-		err = fmt.Errorf("unsupported platform")
-	}
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
 func login(cmd *cobra.Command, args []string) {
-	user, _ := user.Current()
-	configDir := user.HomeDir + "/.config/abstra/"
-	os.MkdirAll(configDir, os.ModePerm)
-	userFile := configDir + "user.json"
-
 	http.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
-		ws, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			log.Println("upgrade:", err)
-			return
-		}
+		ws, upgradeErr := upgrader.Upgrade(w, r, nil)
+		utils.Check(upgradeErr)
 
-		_, msg, _ := ws.ReadMessage()
-		if err != nil {
-			return
-		}
+		_, msg, readErr := ws.ReadMessage()
+		utils.Check(readErr)
 
-		werr := os.WriteFile(userFile, msg, os.ModePerm)
-		check(werr)
-		fmt.Printf("Done!")
+		config.CreateConfigFile(msg)
+		fmt.Println("Done!")
 		os.Exit(0)
 	})
 
-	openbrowser("http://localhost:8001/cli-login")
-	fmt.Printf("Enter http://localhost:8001/cli-login in your browser if it does not load automatically\n")
-	http.ListenAndServe(":6553", nil)
+	opened := utils.OpenBrowser(config.LoginUrl)
+	if !opened {
+		fmt.Printf("Could not open browser automatically.\nPlease open %v in your browser.\n", config.LoginUrl)
+	}
+	http.ListenAndServe(config.Port, nil)
 }
 
 var loginCmd = &cobra.Command{
